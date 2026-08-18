@@ -10,7 +10,7 @@ class Database:
     def __init__(self, path: str):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.initialize()
 
@@ -74,6 +74,29 @@ class Database:
             ),
         )
         self.conn.commit()
+
+    def stats(self) -> dict[str, int]:
+        queries = {
+            "tracks": "SELECT COUNT(*) FROM tracks",
+            "artists": "SELECT COUNT(*) FROM artists",
+            "playlists": "SELECT COUNT(*) FROM playlists",
+            "listening_events": "SELECT COUNT(*) FROM listening_events",
+            "fingerprinted_tracks": "SELECT COUNT(DISTINCT fingerprint) FROM tracks WHERE fingerprint <> ''",
+        }
+        return {name: int(self.conn.execute(sql).fetchone()[0]) for name, sql in queries.items()}
+
+    def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM listening_events ORDER BY id DESC LIMIT ?", (max(1, min(limit, 200)),)
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def top_artists(self, limit: int = 10) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT artist, COUNT(*) AS tracks FROM tracks GROUP BY artist ORDER BY tracks DESC LIMIT ?",
+            (max(1, min(limit, 50)),),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
     def close(self) -> None:
         self.conn.close()
