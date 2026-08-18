@@ -86,6 +86,30 @@ class Database:
         )
         self.conn.commit()
 
+    def tracks(self, limit: int = 100, search: str = "") -> list[dict[str, Any]]:
+        limit = max(1, min(limit, 500))
+        search = search.strip()
+        if search:
+            like = f"%{search}%"
+            rows = self.conn.execute(
+                "SELECT * FROM tracks WHERE title LIKE ? OR artist LIKE ? ORDER BY rowid DESC LIMIT ?",
+                (like, like, limit),
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM tracks ORDER BY rowid DESC LIMIT ?", (limit,)
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["source_ids"] = json.loads(item["source_ids"] or "{}")
+                item["metadata"] = json.loads(item["metadata"] or "{}")
+            except json.JSONDecodeError:
+                pass
+            result.append(item)
+        return result
+
     def insert_listening_event(self, event: dict[str, Any]) -> None:
         self.conn.execute(
             """INSERT INTO listening_events(user_id,track_id,played_at,position_ms,duration_ms,
@@ -114,9 +138,15 @@ class Database:
         self.conn.commit()
 
     def stats(self) -> dict[str, int]:
-        queries = {"tracks":"SELECT COUNT(*) FROM tracks", "artists":"SELECT COUNT(*) FROM artists",
-                   "playlists":"SELECT COUNT(*) FROM playlists", "listening_events":"SELECT COUNT(*) FROM listening_events",
-                   "fingerprinted_tracks":"SELECT COUNT(DISTINCT fingerprint) FROM tracks WHERE fingerprint <> ''"}
+        queries = {
+            "tracks": "SELECT COUNT(*) FROM tracks",
+            "artists": "SELECT COUNT(DISTINCT artist) FROM tracks WHERE TRIM(artist) <> ''",
+            "playlists": "SELECT COUNT(*) FROM playlists",
+            "listening_events": "SELECT COUNT(*) FROM listening_events",
+            "fingerprinted_tracks": "SELECT COUNT(DISTINCT fingerprint) FROM tracks WHERE fingerprint <> ''",
+            "youtube_tracks": "SELECT COUNT(*) FROM tracks WHERE track_id LIKE 'youtube:%'",
+            "tracks_with_duration": "SELECT COUNT(*) FROM tracks WHERE duration_ms IS NOT NULL",
+        }
         return {name: int(self.conn.execute(sql).fetchone()[0]) for name, sql in queries.items()}
 
     def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
@@ -124,7 +154,7 @@ class Database:
         return [dict(row) for row in rows]
 
     def top_artists(self, limit: int = 10) -> list[dict[str, Any]]:
-        rows = self.conn.execute("SELECT artist, COUNT(*) AS tracks FROM tracks GROUP BY artist ORDER BY tracks DESC LIMIT ?", (max(1, min(limit, 50)),)).fetchall()
+        rows = self.conn.execute("SELECT artist, COUNT(*) AS tracks FROM tracks WHERE TRIM(artist) <> '' GROUP BY artist ORDER BY tracks DESC LIMIT ?", (max(1, min(limit, 50)),)).fetchall()
         return [dict(row) for row in rows]
 
     def close(self) -> None:
