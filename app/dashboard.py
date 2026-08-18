@@ -6,13 +6,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 
+from app.collectors.user_rest import UserRestCollector
+from app.collectors.youtube_user import YouTubeUserCollector
 from app.config import settings
+from app.fingerprint import track_fingerprint
 from app.phase2 import build_user_profile
 from app.storage import Database
 from app.sync import sync_user_data
 from app.youtube_oauth import authorization_url, create_state, exchange_code, get_valid_access_token
-from app.collectors.user_rest import UserRestCollector
-from app.collectors.youtube_user import YouTubeUserCollector
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "dashboard"
@@ -96,7 +97,6 @@ async def youtube_sync() -> dict:
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"YouTube sync failed: {exc}") from exc
 
-    # Phase 2 keeps the raw provider payload in track metadata for later normalization.
     for item in likes.get("items", []):
         snippet = item.get("snippet", {})
         video_id = item.get("contentDetails", {}).get("videoId") or item.get("id", {}).get("videoId")
@@ -104,7 +104,6 @@ async def youtube_sync() -> dict:
             continue
         title = snippet.get("title") or "Unknown"
         artist = snippet.get("videoOwnerChannelTitle") or snippet.get("channelTitle") or "Unknown"
-        from app.fingerprint import fingerprint_track
         track = {
             "track_id": f"youtube:{video_id}",
             "title": title,
@@ -114,7 +113,7 @@ async def youtube_sync() -> dict:
             "source_ids": {"youtube": video_id},
             "metadata": {"youtube": item},
         }
-        db.upsert_track(track, fingerprint_track(title, artist, None))
+        db.upsert_track(track, track_fingerprint(title, artist, None))
 
     return {
         "status": "ok",
