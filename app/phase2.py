@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
-from dataclasses import asdict
+from collections import Counter
 from difflib import SequenceMatcher
 from typing import Any
 
-from app.fingerprint import fingerprint_track, normalize_text
+from app.fingerprint import normalize_text, track_fingerprint
 
 
 def match_tracks(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
@@ -73,10 +72,7 @@ def build_user_profile(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def rank_candidates(
-    candidates: list[dict[str, Any]],
-    profile: dict[str, Any],
-) -> list[dict[str, Any]]:
+def rank_candidates(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> list[dict[str, Any]]:
     """Baseline explainable hybrid ranker; intentionally not ML yet."""
     artists = profile.get("artist_affinity", {})
     genres = profile.get("genre_affinity", {})
@@ -103,8 +99,8 @@ def rank_candidates(
 
 
 def fingerprint_for_track(track: dict[str, Any]) -> str:
-    return fingerprint_track(
-        track.get("artist", ""),
+    return track_fingerprint(
         track.get("title", ""),
+        track.get("artist", ""),
         track.get("duration_ms"),
     )
