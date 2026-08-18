@@ -37,6 +37,14 @@ class Database:
             CREATE TABLE IF NOT EXISTS artists (
                 artist_id TEXT PRIMARY KEY, name TEXT NOT NULL, genres TEXT NOT NULL, metadata TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS youtube_oauth_tokens (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                access_token TEXT NOT NULL,
+                refresh_token TEXT,
+                token_type TEXT,
+                scope TEXT,
+                expires_at INTEGER NOT NULL
+            );
             """
         )
         self._ensure_column("listening_events", "artist", "TEXT")
@@ -46,6 +54,25 @@ class Database:
         columns = {row[1] for row in self.conn.execute(f"PRAGMA table_info({table})")}
         if column not in columns:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def save_youtube_oauth_token(self, token: dict[str, Any]) -> None:
+        self.conn.execute(
+            """INSERT INTO youtube_oauth_tokens(id,access_token,refresh_token,token_type,scope,expires_at)
+            VALUES(1,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET access_token=excluded.access_token,
+            refresh_token=COALESCE(excluded.refresh_token,youtube_oauth_tokens.refresh_token),
+            token_type=excluded.token_type, scope=excluded.scope, expires_at=excluded.expires_at""",
+            (token["access_token"], token.get("refresh_token"), token.get("token_type"),
+             token.get("scope"), int(token["expires_at"])),
+        )
+        self.conn.commit()
+
+    def get_youtube_oauth_token(self) -> dict[str, Any] | None:
+        row = self.conn.execute("SELECT * FROM youtube_oauth_tokens WHERE id=1").fetchone()
+        return dict(row) if row else None
+
+    def disconnect_youtube(self) -> None:
+        self.conn.execute("DELETE FROM youtube_oauth_tokens WHERE id=1")
+        self.conn.commit()
 
     def upsert_track(self, track: dict[str, Any], fingerprint: str) -> None:
         self.conn.execute(
