@@ -55,6 +55,19 @@ class Database:
         if column not in columns:
             self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
+    def reset_music_data(self) -> None:
+        """Delete all collected music data but keep the Google OAuth connection."""
+        self.conn.executescript(
+            """
+            DELETE FROM playlist_tracks;
+            DELETE FROM playlists;
+            DELETE FROM listening_events;
+            DELETE FROM artists;
+            DELETE FROM tracks;
+            """
+        )
+        self.conn.commit()
+
     def save_youtube_oauth_token(self, token: dict[str, Any]) -> None:
         self.conn.execute(
             """INSERT INTO youtube_oauth_tokens(id,access_token,refresh_token,token_type,scope,expires_at)
@@ -87,7 +100,7 @@ class Database:
         self.conn.commit()
 
     def tracks(self, limit: int = 100, search: str = "") -> list[dict[str, Any]]:
-        limit = max(1, min(limit, 500))
+        limit = max(1, min(limit, 1000))
         search = search.strip()
         if search:
             like = f"%{search}%"
